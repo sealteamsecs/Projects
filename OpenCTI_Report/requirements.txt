@@ -1,0 +1,4 @@
+pycti
+markdown
+beautifulsoup4
+python-docx
