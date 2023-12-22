@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ransomware Data Visualization</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            text-align: center;
+        }
+        #graph {
+            width: 100%;
+            max-width: 1800px;
+            height: 900px;
+            margin: auto;
+        }
+        #dateSelectors {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Ransomware Victims By Month</h1>
+    <div id="dateSelectors">
+        <input type="month" id="startDate" value="2021-10">
+        <input type="month" id="endDate" value="2022-12">
+        <button onclick="updateGraph()">Update Graph</button>
+    </div>
+    <div id="graph"></div>
+
+    <script>
+        let globalProcessedData = []; // Holds the processed data
+
+        async function fetchAndProcessData() {
+            try {
+                const response = await fetch('https://raw.githubusercontent.com/joshhighet/ransomwatch/main/posts.json');
+                const data = await response.json();
+
+                // Processing the data
+                let monthlyCounts = {};
+                let cumulativeSum = 0;
+                data.forEach(entry => {
+                    const dateParts = entry.discovered.split(" ")[0].split("-");
+                    const date = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+
+                    if (date >= new Date(2021, 9, 1)) {
+                        const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                        monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
+                    }
+                });
+
+                // Convert monthlyCounts to an array of objects and calculate cumulative average
+                globalProcessedData = Object.keys(monthlyCounts).map((monthYear, index) => {
+                    cumulativeSum += monthlyCounts[monthYear];
+                    const [year, month] = monthYear.split('-');
+                    const date = new Date(year, month - 1, 1);
+                    return {
+                        monthFormatted: date.toLocaleString('en-us', { month: 'short', year: 'numeric' }),
+                        numberOfPosts: monthlyCounts[monthYear],
+                        cumulativeAvg: cumulativeSum / (index + 1)
+                    };
+                });
+
+                // Sorting data by month
+                globalProcessedData.sort((a, b) => new Date(a.monthFormatted) - new Date(b.monthFormatted));
+
+                // Plotting the graph
+                plotGraph(globalProcessedData); // Initial plot
+
+            } catch (error) {
+                console.error('Error fetching or processing data:', error);
+            }
+        }
+
+        function updateGraph() {
+            const startDate = new Date(document.getElementById('startDate').value);
+            const endDate = new Date(document.getElementById('endDate').value);
+            endDate.setMonth(endDate.getMonth() + 1); // Include the end month in the range
+
+            const filteredData = globalProcessedData.filter(item => {
+                const itemDate = new Date(item.monthFormatted);
+                return itemDate >= startDate && itemDate < endDate;
+            });
+
+            plotGraph(filteredData);
+        }
+
+        function plotGraph(data) {
+            const trace1 = {
+                x: data.map(item => item.monthFormatted),
+                y: data.map(item => item.numberOfPosts),
+                type: 'bar',
+                name: 'Posts per Month',
+                marker: {
+                    color: data.map(item => item.numberOfPosts),
+                    colorscale: 'Viridis'
+                }
+            };
+
+            const trace2 = {
+                x: data.map(item => item.monthFormatted),
+                y: data.map(item => item.cumulativeAvg),
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Cumulative Average'
+            };
+
+            const layout = {
+                title: 'Ransomware Victims By Month',
+                xaxis: { title: 'Month', tickangle: -45 },
+                yaxis: { title: 'Number of Victims Posted' },
+                height: 900,
+                width: 1800
+            };
+
+            Plotly.newPlot('graph', [trace1, trace2], layout);
+        }
+
+        fetchAndProcessData();
+    </script>
+</body>
+</html>

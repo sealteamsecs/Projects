@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ransomware Group Analysis</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body {
+            text-align: center;
+        }
+        #graph {
+            width: 100%;
+            max-width: 1400px;
+            height: 1200px;
+            margin: auto;
+        }
+        #dateSelectors {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Number of Post Titles by Group Name</h1>
+    <div id="dateSelectors">
+        <input type="date" id="startDate" value="2023-11-01">
+        <input type="date" id="endDate" value="2023-11-30">
+        <button onclick="fetchAndProcessData()">Update Graph</button>
+    </div>
+    <div id="graph"></div>
+
+    <script>
+        function parseDate(dateStr) {
+            const [year, month, day] = dateStr.split('-').map(Number);
+            return new Date(year, month - 1, day); // Months are 0-indexed in JavaScript Date
+        }
+
+        async function fetchAndProcessData() {
+            try {
+                const startDateValue = document.getElementById('startDate').value;
+                const endDateValue = document.getElementById('endDate').value;
+                const startDate = parseDate(startDateValue);
+                const endDate = parseDate(endDateValue);
+
+                // Adjust the end date to include the entire day
+                endDate.setDate(endDate.getDate() + 1);
+
+                const response = await fetch('https://raw.githubusercontent.com/joshhighet/ransomwatch/main/posts.json');
+                const data = await response.json();
+
+                // Filter and process data within the selected date range
+                const filteredData = data.filter(item => {
+                    const discoveredDate = new Date(item.discovered);
+                    return discoveredDate >= startDate && discoveredDate < endDate;
+                });
+
+                // Count posts by group
+                let groupCounts = {};
+                filteredData.forEach(item => {
+                    groupCounts[item.group_name] = (groupCounts[item.group_name] || 0) + 1;
+                });
+
+                // Convert groupCounts to array of objects
+                const groupCountsArray = Object.keys(groupCounts).map(groupName => ({
+                    group_name: groupName,
+                    post_title: groupCounts[groupName]
+                }));
+
+                // Sort by group name
+                groupCountsArray.sort((a, b) => a.group_name.localeCompare(b.group_name));
+
+                // Plotting the graph
+                plotGraph(groupCountsArray, startDateValue, endDateValue);
+
+            } catch (error) {
+                console.error('Error fetching or processing data:', error);
+            }
+        }
+
+        function plotGraph(data, startDateValue, endDateValue) {
+            const formattedStartDate = parseDate(startDateValue).toLocaleDateString();
+            const formattedEndDate = parseDate(endDateValue).toLocaleDateString();
+
+            const trace = {
+                x: data.map(item => item.post_title),
+                y: data.map(item => item.group_name),
+                type: 'bar',
+                orientation: 'h',
+                marker: {
+                    color: data.map(item => item.post_title),
+                    colorscale: 'Viridis'
+                },
+                text: data.map(item => item.post_title)
+            };
+
+            const layout = {
+                title: `Number of Post Titles by Group Name from ${formattedStartDate} to ${formattedEndDate}`,
+                xaxis: { title: 'Number of Posts' },
+                yaxis: { title: 'Group Name', automargin: true },
+                autosize: false,
+                width: 1400,
+                height: 1200
+            };
+
+            Plotly.newPlot('graph', [trace], layout);
+        }
+
+        fetchAndProcessData();
+    </script>
+</body>
+</html>
