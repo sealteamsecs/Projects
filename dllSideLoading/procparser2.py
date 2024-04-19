@@ -44,7 +44,7 @@ def main():
     password = "CHANGE_ME"
     importer = Neo4jImporter(uri, user, password)
 
-    csv_file = 'Logfile.csv'
+    csv_file = 'Logfile3.csv'
     chunk_size = 20000  # Adjust based on your system's memory and the actual data size
 
     executor = ThreadPoolExecutor(max_workers=4)  # Adjust number of workers based on your machine's capability
