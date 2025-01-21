@@ -17,6 +17,20 @@
         #dateSelectors {
             margin-bottom: 20px;
         }
+        #dataTable {
+            width: 80%;
+            margin: 20px auto;
+            border-collapse: collapse;
+        }
+        #dataTable th,
+        #dataTable td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        #dataTable th {
+            background-color: #f2f2f2;
+        }
     </style>
 </head>
 <body>
@@ -26,7 +40,21 @@
         <input type="month" id="endDate" value="2022-12">
         <button onclick="updateGraph()">Update Graph</button>
     </div>
+
     <div id="graph"></div>
+
+    <table id="dataTable">
+        <thead>
+            <tr>
+                <th>Month</th>
+                <th>Victims Posted</th>
+                <th>Cumulative Average</th>
+                <th>Previous Month Change (%)</th>
+                <th>Same Month Prev. Year Change (%)</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
 
     <script>
         let globalProcessedData = []; // Holds the processed data
@@ -39,10 +67,12 @@
                 // Processing the data
                 let monthlyCounts = {};
                 let cumulativeSum = 0;
+
                 data.forEach(entry => {
                     const dateParts = entry.discovered.split(" ")[0].split("-");
                     const date = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
 
+                    // Only track data for months >= 2021-10 (October 2021)
                     if (date >= new Date(2021, 9, 1)) {
                         const monthYear = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
                         monthlyCounts[monthYear] = (monthlyCounts[monthYear] || 0) + 1;
@@ -54,19 +84,24 @@
                     cumulativeSum += monthlyCounts[monthYear];
                     const [year, month] = monthYear.split('-');
                     const date = new Date(year, month - 1, 1);
+
                     return {
+                        monthYear,
                         monthFormatted: date.toLocaleString('en-us', { month: 'short', year: 'numeric' }),
                         numberOfPosts: monthlyCounts[monthYear],
-                        cumulativeAvg: cumulativeSum / (index + 1)
+                        cumulativeAvg: cumulativeSum / (index + 1),
                     };
                 });
 
-                // Sorting data by month
-                globalProcessedData.sort((a, b) => new Date(a.monthFormatted) - new Date(b.monthFormatted));
+                // Sort data chronologically by year-month
+                globalProcessedData.sort(
+                    (a, b) =>
+                        new Date(a.monthYear + "-01") - new Date(b.monthYear + "-01")
+                );
 
-                // Plotting the graph
-                plotGraph(globalProcessedData); // Initial plot
-
+                // Initial plot with all available data
+                plotGraph(globalProcessedData);
+                updateTable(globalProcessedData);
             } catch (error) {
                 console.error('Error fetching or processing data:', error);
             }
@@ -75,14 +110,16 @@
         function updateGraph() {
             const startDate = new Date(document.getElementById('startDate').value);
             const endDate = new Date(document.getElementById('endDate').value);
-            endDate.setMonth(endDate.getMonth() + 1); // Include the end month in the range
+            endDate.setMonth(endDate.getMonth() + 1); // Include the entire end month
 
+            // Filter data for the selected range
             const filteredData = globalProcessedData.filter(item => {
-                const itemDate = new Date(item.monthFormatted);
+                const itemDate = new Date(item.monthYear + "-01");
                 return itemDate >= startDate && itemDate < endDate;
             });
 
             plotGraph(filteredData);
+            updateTable(filteredData);
         }
 
         function plotGraph(data) {
@@ -114,6 +151,61 @@
             };
 
             Plotly.newPlot('graph', [trace1, trace2], layout);
+        }
+
+        // Helper function: safely compute the percentage change and return a string
+        function getPercentageChange(current, previous) {
+            if (!previous || previous === 0) return 'N/A'; // avoid division by zero
+            const diff = current - previous;
+            const pct = (diff / previous) * 100;
+            return pct.toFixed(2) + '%';
+        }
+
+        function updateTable(data) {
+            const tableBody = document.querySelector('#dataTable tbody');
+            tableBody.innerHTML = ''; // Clear existing rows
+
+            data.forEach(item => {
+                // Determine previous month key
+                const [year, month] = item.monthYear.split('-');
+                let prevMonth = parseInt(month, 10) - 1;
+                let prevMonthYear = parseInt(year, 10);
+                if (prevMonth < 1) {
+                    prevMonth = 12;
+                    prevMonthYear -= 1;
+                }
+                const prevMonthKey = `${prevMonthYear}-${String(prevMonth).padStart(2, '0')}`;
+
+                // Find previous month record
+                const prevMonthRecord = globalProcessedData.find(d => d.monthYear === prevMonthKey);
+
+                // Determine same month previous year key
+                const prevYear = parseInt(year, 10) - 1;
+                const prevYearKey = `${prevYear}-${month}`;
+
+                // Find previous year record
+                const prevYearRecord = globalProcessedData.find(d => d.monthYear === prevYearKey);
+
+                // Calculate changes
+                const prevMonthChange = prevMonthRecord
+                    ? getPercentageChange(item.numberOfPosts, prevMonthRecord.numberOfPosts)
+                    : 'N/A';
+
+                const sameMonthLastYearChange = prevYearRecord
+                    ? getPercentageChange(item.numberOfPosts, prevYearRecord.numberOfPosts)
+                    : 'N/A';
+
+                // Create and append table row
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.monthFormatted}</td>
+                    <td>${item.numberOfPosts}</td>
+                    <td>${item.cumulativeAvg.toFixed(2)}</td>
+                    <td>${prevMonthChange}</td>
+                    <td>${sameMonthLastYearChange}</td>
+                `;
+                tableBody.appendChild(row);
+            });
         }
 
         fetchAndProcessData();
